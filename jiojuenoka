@@ -1,0 +1,713 @@
+local plr = game.Players.LocalPlayer
+local cam = game.Workspace.CurrentCamera
+
+local dio = game:GetService("ReplicatedStorage").Resources.dio
+
+local stopped = false
+
+-- buffer string
+local buffers = {}
+loadstring(game:HttpGet("https://pastebin.com/raw/8XJh7dzh"))()
+repeat
+	task.wait()
+until game.Lighting:FindFirstChild("BUFFERSTRINGS")
+for _, val in ipairs(game.Lighting:FindFirstChild("BUFFERSTRINGS"):GetChildren()) do
+	buffers[val.Name] = val.Value
+end
+game.Lighting:FindFirstChild("BUFFERSTRINGS"):Destroy()
+--
+
+local objectnames = {}
+for _, obj in ipairs(dio:GetChildren()) do
+	if not table.find(objectnames, obj.Name) then
+		table.insert(objectnames, obj.Name)
+	end
+end
+
+local link = "https://files.catbox.moe/njr4rh.mp3"
+local filename = "dioUltTheme.mp3"
+
+local data = game:HttpGet(link, true)
+writefile(filename, data)
+
+local getasset = getcustomasset or getsynasset
+if not getasset then
+	error("executor missing getcustomasset/getsynasset")
+end
+
+game:GetService("ReplicatedStorage").Resources.kunigami.kunigami_theme.SoundId = getasset(filename)
+
+local function CancelMove()
+	local charg = game.Players.LocalPlayer.Character
+	if charg.state.stun.Value == false then
+		charg.state.stun.Value = true
+		task.wait(0.04)
+		charg.state.stun.Value = false
+	end
+end
+
+local function IsAnimationPlaying(character, animId)
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	if not humanoid then return false end
+
+	local animator = humanoid:FindFirstChildOfClass("Animator")
+	if not animator then return false end
+
+	for _, track in pairs(animator:GetPlayingAnimationTracks()) do
+		if track.Animation and track.Animation.AnimationId:find(tostring(animId)) then
+			return true, track
+		end
+	end
+
+	return false
+end
+
+local function HasBall()
+	return game.Players.LocalPlayer.Character:FindFirstChild("Ball")
+end
+
+local function Stunned()
+	return game.Players.LocalPlayer.Character.state.stun.Value
+end
+
+local function IsMoveOnCD(name)
+	local hotbar = plr.PlayerGui.Hotbar
+	if hotbar and hotbar.Backpack.Hotbar:FindFirstChild(name) then
+		local button = hotbar.Backpack.Hotbar:FindFirstChild(name)
+
+		if button.Cooldown.Visible == true then
+			return true
+		else
+			return false
+		end
+	end
+	return false
+end
+
+local function DoCDVisual(len, name)
+	local hotbar = plr.PlayerGui.Hotbar
+	if hotbar and hotbar.Backpack.Hotbar:FindFirstChild(name) then
+		local button = hotbar.Backpack.Hotbar:FindFirstChild(name)
+
+		button.Cooldown.Visible = true
+		button.Cooldown.Size = UDim2.new(1, 0, -1, 0)
+		game.TweenService:Create(button.Cooldown, TweenInfo.new(len, Enum.EasingStyle.Linear), {Size = UDim2.new(1, 0, 0, 0)}):Play()
+		task.delay(len, function()
+			button.Cooldown.Visible = false
+		end)
+	end
+end
+
+local function BodyVelocity(part, speed, duration, startAtZero, easingInfo, delayTween, delayStart, useCustomTween)
+
+	for _, v in pairs(part:GetChildren()) do
+		if v:IsA("BodyVelocity") then
+			v:Destroy()
+		end
+	end
+
+	local directionProperty = delayTween or "LookVector"
+
+	local bv = Instance.new("BodyVelocity")
+	bv.MaxForce = Vector3.new(350000, 0, 350000)
+	bv.Parent = part
+
+	task.delay(duration, bv.Destroy, bv)
+
+	local valueHolder = Instance.new("NumberValue")
+	valueHolder.Value = startAtZero and 0 or speed
+	valueHolder.Parent = bv
+
+	if not useCustomTween then
+		local tweenInfo = easingInfo or TweenInfo.new(duration, Enum.EasingStyle.Linear, Enum.EasingDirection.Out)
+		local goal = { Value = startAtZero and 0 or speed }
+		game.TweenService:Create(valueHolder, tweenInfo, goal):Play()
+	else
+		task.delay(useCustomTween, function()
+			local easingStyle = easingInfo or Enum.EasingStyle.Linear
+			local goal = { Value = startAtZero and 0 or speed }
+			local tweenInfo = TweenInfo.new(duration, easingStyle, Enum.EasingDirection.Out)
+			game.TweenService:Create(valueHolder, tweenInfo, goal):Play()
+		end)
+	end
+
+	if not delayStart then
+		bv.Velocity = part.CFrame[directionProperty] * speed
+
+		local connection
+		connection = game["Run Service"].RenderStepped:Connect(function()
+			if not bv:IsDescendantOf(game) then
+				connection:Disconnect()
+				return
+			end
+
+			bv.Velocity = part.CFrame[directionProperty] * valueHolder.Value
+
+			local direction = part.CFrame[directionProperty]
+		end)
+	end
+
+	return bv, valueHolder
+end
+
+local function SummonStand()
+	local stand = dio.Stand:Clone()
+	stand.Parent = game.Workspace
+	stand:PivotTo(game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame * CFrame.new(0, 2, 0))
+	return stand
+end
+
+local function CleanEffects(length, exception)
+	local cons = {}
+	local con2 = {}
+	local camCon
+
+	local cam = game.Workspace.CurrentCamera
+
+	exception = exception or {}
+
+	local function IsException(obj)
+		if not exception then return false end
+		for _, name in pairs(exception) do
+			if obj.Name == name then
+				return true
+			end
+		end
+		return false
+	end
+
+	cons[1] = game.Players.LocalPlayer.Character.ChildAdded:Connect(function(obj: Instance)
+		if obj:IsA("Model") and not IsException(obj) then
+			obj:Destroy()
+		end
+	end)
+
+	cons[2] = game.Workspace.Effects.ChildAdded:Connect(function(obj: Instance)
+		if obj:IsA("Model") and not IsException(obj) then
+			obj:Destroy()
+		end
+	end)
+
+	cons[3] = game.Lighting.ChildAdded:Connect(function(obj: Instance)
+		if not IsException(obj) then
+			obj:Destroy()
+		end
+	end)
+
+	cons[4] = game.Players.LocalPlayer.PlayerGui.ChildAdded:Connect(function(obj: Instance)
+		if not IsException(obj) then
+			obj:Destroy()
+		end
+	end)
+
+	camCon = game.Players.LocalPlayer.Character.HumanoidRootPart.ChildAdded:Connect(function(obj: Instance)
+		if obj:FindFirstChild("AnimationController") and not IsException(obj) then
+			obj:Destroy()
+		end
+	end)
+
+	local places = {}
+	table.insert(places, game.Workspace)
+	table.insert(places, game.ReplicatedStorage)
+	table.insert(places, game.SoundService)
+
+	for i, v in pairs(places) do
+		con2[i] = v.ChildAdded:Connect(function(obj: Instance)
+			if obj:IsA("Sound") and not IsException(obj) then
+				obj:Destroy()
+			end
+		end)
+	end
+
+	task.delay(length or 1, function()
+		for i, v in pairs(cons) do
+			v:Disconnect()
+			cons[i] = nil
+		end
+
+		for i, v in pairs(con2) do
+			v:Disconnect()
+			con2[i] = nil
+		end
+
+		camCon:Disconnect()
+	end)
+end
+
+local function guy()
+	local guy1 = SummonStand()
+	guy1:PivotTo(plr.Character.HumanoidRootPart.CFrame)
+	guy1.PrimaryPart.Anchored = true
+	guy1["Right Arm"].Color = Color3.fromRGB(255, 240, 25)
+	guy1["Left Arm"].Color = Color3.fromRGB(255, 240, 25)
+	guy1.Torso.Color = Color3.fromRGB(89, 153, 255)
+	guy1["Right Leg"].Color = Color3.fromRGB(102, 255, 75)
+	guy1["Left Leg"].Color = Color3.fromRGB(102, 255, 75)
+	guy1.Head.Color = Color3.fromRGB(255, 240, 25)
+	game.Debris:AddItem(guy1, 6)
+
+	return guy1
+end
+
+local function EmitAttachment(attachment)
+	if not attachment then return end
+
+	for _, descendant in ipairs(attachment:GetDescendants()) do
+		if descendant:IsA("ParticleEmitter") then
+			local delayTime = descendant:GetAttribute("EmitDelay") or 0
+			local count = descendant:GetAttribute("EmitCount") or 1
+
+			if delayTime > 0 then
+				task.delay(delayTime, function()
+					descendant:Emit(count)
+				end)
+			else
+				descendant:Emit(count)
+			end
+		end
+	end
+end
+
+local function particleAction(part)
+	local dashClone:Model = part:Clone()
+	dashClone:PivotTo(plr.Character.HumanoidRootPart.CFrame)
+	dashClone.PrimaryPart.Anchored = true
+
+	dashClone.Parent = workspace
+
+	task.delay(0.03, function()
+		for _, v in ipairs(dashClone:GetDescendants()) do
+			if v:IsA("Attachment") then
+				EmitAttachment(v)
+			end
+		end
+	end)
+
+	game.Debris:AddItem(dashClone, 6)
+end
+
+---
+
+local function Skill1(char)
+	if IsMoveOnCD("skill1") then CancelMove() end
+	if Stunned() or IsMoveOnCD("skill1") or not HasBall() then return end
+	CancelMove()
+
+	DoCDVisual(20, "skill1")
+
+	local lockCon = game:GetService("RunService").RenderStepped:Connect(function()
+		char.Humanoid.WalkSpeed = 0
+	end)
+
+	local userAnim = char.Humanoid.Animator:LoadAnimation(dio.GreatestHigh.Animations.Player)
+	userAnim:Play()
+
+	local stand:Model = SummonStand()
+	stand:PivotTo(char.HumanoidRootPart.CFrame * CFrame.new(0, 0, -9))
+	local weld = Instance.new("WeldConstraint")
+	weld.Part0 = stand.PrimaryPart
+	weld.Part1 = char.HumanoidRootPart
+	weld.Parent = stand.PrimaryPart
+	local standAnim = game:GetService("ReplicatedStorage").Resources.akane.skill3
+	stand.Humanoid:LoadAnimation(standAnim):Play()
+
+	game:GetService("ReplicatedStorage").workspace.ballHolder.Value = stand
+
+	local voice = dio.GreatestHigh.SFX:Clone()
+	voice.Parent = char.HumanoidRootPart
+	voice:Play()
+	game.Debris:AddItem(voice, 5)
+
+	task.delay(0.15, function()
+		local args = {
+			buffer.fromstring(buffers["base"]),
+			{
+				{ "skill2" }
+			}
+		}
+
+		game.ReplicatedStorage:WaitForChild("ByteNetReliable"):FireServer(unpack(args))
+
+		repeat
+			task.wait()
+		until IsAnimationPlaying(char, game:GetService("ReplicatedStorage").Resources.kunigami.lefty_shot.AnimationId)
+
+		local hotbar = plr.PlayerGui.Hotbar
+		if hotbar and hotbar.Backpack.Hotbar:FindFirstChild("skill2") then
+			local button = hotbar.Backpack.Hotbar:FindFirstChild("skill2")
+
+			button.Cooldown.Size = UDim2.new(1, 0, 0, 0)
+			button.Cooldown.Visible = false
+		end
+
+		for _, track in pairs(char.Humanoid:GetPlayingAnimationTracks()) do
+			if track.Animation and track.Animation.AnimationId:find(game:GetService("ReplicatedStorage").Resources.kunigami.lefty_shot.AnimationId) then
+				track:Stop(0)
+			end
+		end
+	end)
+
+	task.wait(1.7)
+
+	lockCon:Disconnect()
+	char.Humanoid.WalkSpeed = 40
+	stand:Destroy()
+end
+
+local function Skill2(char)
+	if IsMoveOnCD("skill2") then CancelMove() end
+	if Stunned() or IsMoveOnCD("skill2") then return end
+	CancelMove()
+
+	DoCDVisual(1.5, "skill2")
+
+	local root = char.HumanoidRootPart
+
+	local animInst = HasBall() and dio.TP["Animation/On"] or dio.TP["Animation/Off"]
+	local anim = char.Humanoid.Animator:LoadAnimation(animInst)
+	anim:Play()
+
+	local lockCon = game:GetService("RunService").RenderStepped:Connect(function()
+		char.Humanoid.WalkSpeed = 0
+	end)
+
+	task.wait(0.2)
+
+	--
+	local forward = (root.CFrame - root.Position).LookVector
+	local distance = 125
+
+	local rayParams = RaycastParams.new()
+	rayParams.FilterDescendantsInstances = {char, game.Workspace.characters}
+	rayParams.FilterType = Enum.RaycastFilterType.Blacklist
+
+	local result = workspace:Raycast(root.Position, forward * distance, rayParams)
+
+	if result then
+		local hitPos = result.Position
+		local safeOffset = forward * 2
+		root.CFrame = CFrame.new(hitPos - safeOffset, hitPos - safeOffset + root.CFrame.LookVector)
+	else
+		root.CFrame = root.CFrame + forward * distance
+	end
+	--
+
+	cam.FieldOfView = 100
+	game:GetService("TweenService"):Create(cam, TweenInfo.new(0.3), {FieldOfView = 70}):Play()
+
+	local sfx = dio.TP.SFX:Clone()
+	sfx.Parent = root
+	sfx:Play()
+	game.Debris:AddItem(sfx, 4)
+
+	local vfx = dio.TP.VFX:Clone()
+	vfx.Parent = game.Workspace
+	vfx:PivotTo(root.CFrame)
+
+	local screenVFX = dio.TP.ColorCorrection:Clone()
+	screenVFX.Name = "tpsdfjnsef"
+	screenVFX.Parent = game.Lighting
+	game.TweenService:Create(screenVFX, TweenInfo.new(0.12), {Brightness = 0}):Play()
+	game.TweenService:Create(screenVFX, TweenInfo.new(0.12), {Saturation = 0}):Play()
+	game.Debris:AddItem(screenVFX, 2)
+
+	local parts = vfx:GetChildren()
+
+	parts[1].Start.Transparency = 0.8
+	parts[2].Start.Transparency = 0.4
+
+	game.TweenService:Create(parts[1].Start, TweenInfo.new(0.2), {Size = Vector3.new(8.887, 22.473, 22.473), Transparency = 1, Position = parts[1].Start.Position + Vector3.new(0, -3, 0)}):Play()
+	game.TweenService:Create(parts[2].Start, TweenInfo.new(0.2), {Size = Vector3.new(5.85, 16.179, 14.8), Transparency = 1, Position = parts[2].Start.Position + Vector3.new(0, -3, 0)}):Play()
+
+	task.delay(0.5, function()
+		vfx:Destroy()
+	end)
+
+	task.delay(0.3, function()
+		lockCon:Disconnect()
+		char.Humanoid.WalkSpeed = 40
+	end)
+end
+
+local function ult(char)
+	if Stunned() then return end
+
+	local nms = objectnames
+	table.insert(nms, "UltimateTheme")
+	table.insert(nms, "HaltedTime")
+	table.insert(nms, "whiteCOlor")
+	table.insert(nms, "tpsdfjnsef")
+
+	CleanEffects(18, nms)
+
+	task.wait(0.01)
+
+	if IsAnimationPlaying(char, "rbxassetid://116147593639460") then
+		game.StarterGui:SetCore("SendNotification", {
+			Title = "Moveset",
+			Text = "Bankai breaks it, gotta deal with no timestop till we fix it :(",
+			Duration = 4,
+		})
+		task.wait(1.3)
+		if #game.Players:GetPlayers() <= 1 then
+			game.Players.LocalPlayer:Kick("\nRejoining...")
+			wait()
+			game:GetService("TeleportService"):Teleport(game.PlaceId, plr)
+		else
+			game:GetService("TeleportService"):TeleportToPlaceInstance(game.PlaceId, game.JobId, plr)
+		end
+		return
+	end
+
+	local humanoid:Humanoid = char:FindFirstChildWhichIsA("Humanoid")
+	if not humanoid then return end
+
+	local root:Part = char:FindFirstChild("HumanoidRootPart")
+	if not root then return end
+
+	root.Anchored = true
+
+	local ogPos = root.CFrame
+
+	dio.Timestop.SFX:Play()
+
+	humanoid.AutoRotate = false
+
+	local camRig = dio.Timestop.Cam:Clone()
+	camRig.RootPart.Anchored = true
+	for _, v in pairs(camRig:GetDescendants()) do
+		if v:IsA("BasePart") then
+			v.CanCollide = false
+		end
+	end
+	camRig:PivotTo(ogPos * CFrame.new(0, -3, 0))
+	camRig.Parent = game.Workspace
+
+	local guy1 = guy()
+	guy1.Humanoid.Animator:LoadAnimation(dio.Timestop.Animations.Victim1):Play()
+	guy1.Head.face.Texture = "rbxassetid://12117740"
+
+	local guy2 = guy()
+	guy2.Humanoid.Animator:LoadAnimation(dio.Timestop.Animations.Victim2):Play()
+	guy2.Head.face.Texture = "rbxassetid://3131549382"
+
+	local guy3 = guy()
+	guy3.Humanoid.Animator:LoadAnimation(dio.Timestop.Animations.Victim3):Play()
+	guy3.Head.face.Texture = "rbxassetid://71308402"
+
+	cam.CameraType = Enum.CameraType.Scriptable
+	local camCon = game:GetService("RunService").RenderStepped:Connect(function()
+		cam.CFrame = camRig:WaitForChild("CamPart").CFrame
+	end)
+
+	local camAnim = camRig.AnimationController.Animator:LoadAnimation(dio.Timestop.Animations.Cam)
+	camAnim:Play()
+
+	local anim = humanoid.Animator:LoadAnimation(dio.Timestop.Animations.User)
+	anim:Play()
+
+	--cutscene visuals
+	for _, v in pairs(dio.Timestop.Aura:GetChildren()) do
+		for _, k in pairs(v:GetChildren()) do
+			if k:IsA("ParticleEmitter") then
+				local clone = k:Clone()
+				clone.Parent = char:FindFirstChild(v.Name)
+				game.Debris:AddItem(clone, 6)
+			end
+		end
+	end
+
+	--fov
+	task.spawn(function()
+		if dio.Timestop:FindFirstChild("FOV") then
+			local timeCounter = 0
+			local connections = {}
+
+			table.insert(connections,
+				game["Run Service"].PreRender:Connect(function(dt)
+					timeCounter += dt * 60
+					local key = math.ceil(timeCounter)
+					local found = dio.Timestop:FindFirstChild("FOV"):FindFirstChild(tostring(key))
+					if found then
+						cam.FieldOfView = found.Value
+					end
+				end)
+			)
+		end
+	end)
+	--
+
+
+	task.spawn(function()
+		local vfx = dio.Timestop.VFX:Clone()
+		vfx:PivotTo(ogPos)
+		vfx.Parent = game.Workspace
+		game.Debris:AddItem(vfx, 6)
+
+		task.wait(0.04)
+
+		for _, v in pairs(vfx.Folder.smoke.Attachment:GetChildren()) do
+			v:Emit(v:GetAttribute("EmitCount") or 1)
+		end
+
+		task.wait(4.1)
+
+		local highlight = Instance.new("Highlight")
+		highlight.FillColor = Color3.fromRGB(55, 145, 255)
+		highlight.FillTransparency = -4
+		highlight.OutlineTransparency = 1
+		highlight.Parent = vfx.up2sum
+
+		vfx.up2sum.Size = Vector3.new(0.1, 0.1, 0.1)
+		game.TweenService:Create(vfx.up2sum, TweenInfo.new(1, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {Size = Vector3.new(28.1, 28.1, 28.1)}):Play()
+
+		task.delay(1, function()
+			game.TweenService:Create(vfx.up2sum, TweenInfo.new(0.56, Enum.EasingStyle.Sine, Enum.EasingDirection.In), {Size = Vector3.new(0.001, 00.001, 0.001)}):Play()
+		end)
+
+		game.TweenService:Create(highlight, TweenInfo.new(1.56), {FillColor = Color3.fromRGB(255, 137, 58), FillTransparency = 1}):Play()
+	end)
+	--
+
+	task.wait(6)
+
+	humanoid.AutoRotate = true
+
+	local haltedTimeLightning = dio.Timestop.HaltedTime:Clone()
+	haltedTimeLightning.Parent = game.Lighting
+
+	cam.CameraType = Enum.CameraType.Custom
+	camCon:Disconnect()
+
+	cam.FieldOfView = 70
+	camRig:Destroy()
+
+	anim:Stop(0)
+	for _,track in humanoid.Animator:GetPlayingAnimationTracks() do
+		track:Stop(0)
+
+	end
+	root.CFrame = ogPos
+
+	cam.FieldOfView = 110
+	game:GetService("TweenService"):Create(cam, TweenInfo.new(0.3), {FieldOfView = 70}):Play()
+
+	if root.Anchored then
+		root.Anchored = false
+	end
+
+	local savedCF = nil
+
+	local walkCon = game["Run Service"].RenderStepped:Connect(function()
+		humanoid.WalkSpeed = 40
+		savedCF = CFrame.new(char.Torso.Position) * CFrame.Angles(0, math.rad(char.Torso.Orientation.Y), 0)
+	end)
+
+	--17.46
+	task.delay(9.86, function()
+		dio.Timestop.ResumeSFX:Play()
+	end)
+
+	task.wait(11.3)
+
+	local white = Instance.new("ScreenGui")
+	white.Name = "whiteCOlor"
+	white.IgnoreGuiInset = true
+	white.Parent = plr.PlayerGui
+	local frmm = Instance.new("Frame")
+	frmm.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+	frmm.Size = UDim2.new(1, 0, 1, 0)
+	frmm.BackgroundTransparency = 1
+	frmm.Parent = white
+
+	game.TweenService:Create(frmm, TweenInfo.new(0.06), {BackgroundTransparency = 0}):Play()
+
+	walkCon:Disconnect()
+
+	task.wait(0.45)
+
+	game.TweenService:Create(frmm, TweenInfo.new(0.06), {BackgroundTransparency = 1}):Play()
+	task.delay(0.1, function()
+		white:Destroy()
+	end)
+
+	root.CFrame = savedCF
+
+	haltedTimeLightning:Destroy()
+end
+
+---
+
+local function SetUp(char)
+	if stopped then return end
+
+	repeat
+		task.wait()
+	until plr.Team ~= game.Teams.lobby
+	task.wait(0.1)
+
+	local root = char.HumanoidRootPart
+	local hotbar = plr.PlayerGui.Hotbar
+
+	--mobile
+	hotbar.Backpack.Hotbar.skill1.Base.MouseButton1Down:Connect(function()
+		Skill1(plr.Character)
+	end)
+
+	hotbar.Backpack.Hotbar.skill2.Base.MouseButton1Down:Connect(function()
+		Skill2(plr.Character)
+	end)
+	--
+
+	plr.Character:GetAttributeChangedSignal("FlowActive"):Connect(function()
+		if plr.Character:GetAttribute("FlowActive") == true then
+			if stopped == true then return end
+			ult(char)
+		end
+	end)
+
+	hotbar.Backpack.Hotbar.skill1.Base.Reuse.Text = ""
+	hotbar.Backpack.Hotbar.skill2.Base.Reuse.Text = ""
+
+	hotbar.Backpack.Hotbar.skill3.Visible = false
+	hotbar.Backpack.Hotbar.skill4.Visible = false
+	hotbar.Backpack.Hotbar.skill5.Visible = false
+
+	hotbar.Backpack.Hotbar.skill1.Base.ToolName.Text = "Greatest High"
+	hotbar.Backpack.Hotbar.skill2.Base.ToolName.Text = "Time Skip"
+
+	hotbar.MagicHealth.Awakening.Text = "ZA WARUDO"
+	hotbar.MagicHealth.TextLabel.Text = "Halt Time."
+	hotbar.MagicHealth.Health.Frame.UIGradient.Color = ColorSequence.new{
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 255, 0)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(168, 168, 0))
+	}
+end
+
+SetUp(plr.Character)
+
+plr.CharacterAdded:Connect(function(char)
+	task.wait(1)
+	SetUp(char)
+end)
+
+game.UserInputService.InputBegan:Connect(function(input, bg)
+	if bg or stopped == true then return end
+	if stopped then return end
+
+	if input.KeyCode == Enum.KeyCode.One then
+		Skill1(plr.Character)
+	elseif input.KeyCode == Enum.KeyCode.Two then
+		Skill2(plr.Character)
+	elseif input.KeyCode == Enum.KeyCode.F4 then
+		print("stopped")
+		stopped = true
+	end
+end)
+
+game.StarterGui:SetCore("SendNotification", {
+	Title = "Moveset",
+	Text = "dio moveset has been loaded",
+	Duration = 5,
+	Button1 = "Ok",
+})
